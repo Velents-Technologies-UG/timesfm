@@ -1,0 +1,8 @@
+# Forecast microservice deps. The timesfm package itself is installed from the
+# repo root (pip install ../../.[torch]) so the service always tracks the
+# vendored model code; these are the extra HTTP-server deps.
+fastapi>=0.110
+uvicorn[standard]>=0.29
+numpy>=2.0
+# Installed separately in the Dockerfile from the repo root:
+#   pip install ".[torch]"
