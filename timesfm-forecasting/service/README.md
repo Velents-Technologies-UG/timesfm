@@ -55,11 +55,13 @@ misleading line (BRD TF-3 / FR-16 / AC-8).
 
 ```bash
 # from the timesfm repo root
-pip install ".[torch]" && pip install -r timesfm-forecasting/api/requirements.txt
-uvicorn timesfm-forecasting.api.main:app --host 0.0.0.0 --port 8200
+pip install ".[torch]" && pip install -r timesfm-forecasting/service/requirements.txt
+uvicorn timesfm-forecasting.service.main:app --host 0.0.0.0 --port 8124
 # or via Docker (build context = repo root):
-docker build -f timesfm-forecasting/api/Dockerfile -t velents-forecast .
+docker build -f timesfm-forecasting/service/Dockerfile -t velents-forecast .
 ```
 
-Deployed on the existing GPU pool (see devops `ml/.../forecast-api`). ~2 GB
-VRAM for the 200M checkpoint.
+Built + deployed by the Jenkins pipeline `devops:aws/ml/prod/jenkins-pipelines/timesfm`
+(pushes to ECR `…/timesfm`, deploy chart `devops:aws/ml/prod/helm-charts/timesfm`).
+Port **8124** matches that chart's containerPort + `/health` probes. ~2 GB VRAM
+(or CPU) for the 200M checkpoint.
