@@ -79,6 +79,14 @@ def _get_model(infer_is_positive: bool):
         return _model
 
 
+class Covariate(BaseModel):
+    # Known-future regressor aligned to the series: `history` parallels
+    # `values`, `future` parallels the forecast horizon. The caller (PHP) owns
+    # the calendar, so e.g. a Ramadan flag is fully known for future dates.
+    history: list[float]
+    future: list[float]
+
+
 class ForecastRequest(BaseModel):
     # The observed series, oldest → newest. No timestamps: the caller owns the
     # calendar and re-attaches future timestamps to our output.
@@ -88,6 +96,8 @@ class ForecastRequest(BaseModel):
     # Counts/volumes can't go negative; the caller sets this per metric.
     positive: bool = True
     mode: Literal["forecast", "anomaly"] = "forecast"
+    # Optional known-future regressors, keyed by name (e.g. {"ramadan": {...}}).
+    covariates: dict[str, Covariate] | None = None
 
 
 class ForecastResponse(BaseModel):
@@ -121,7 +131,33 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     horizon = min(req.horizon, MAX_HORIZON)
     model = _get_model(infer_is_positive=req.positive)
 
-    point_forecast, quantile_forecast = model.forecast(horizon=horizon, inputs=[series])
+    # Truncate to the model's context window; covariates are aligned to the
+    # SAME truncation so dynamic-covariate length stays context + horizon.
+    ctx = min(series.size, MAX_CONTEXT)
+    series = series[-ctx:]
+
+    if req.covariates:
+        dynamic_numerical = {}
+        for name, cov in req.covariates.items():
+            hist = np.asarray(cov.history, dtype=np.float32)[-ctx:]
+            fut = np.asarray(cov.future, dtype=np.float32)[:horizon]
+            # Must be exactly context + horizon; skip anything misaligned
+            # rather than letting the model raise.
+            if hist.size == ctx and fut.size == horizon:
+                dynamic_numerical[name] = [np.concatenate([hist, fut])]
+
+        if dynamic_numerical:
+            point_forecast, quantile_forecast = model.forecast_with_covariates(
+                inputs=[series],
+                dynamic_numerical_covariates=dynamic_numerical,
+                dynamic_categorical_covariates={},
+                static_categorical_covariates={},
+                xreg_mode="xreg + timesfm",
+            )
+        else:
+            point_forecast, quantile_forecast = model.forecast(horizon=horizon, inputs=[series])
+    else:
+        point_forecast, quantile_forecast = model.forecast(horizon=horizon, inputs=[series])
 
     point = np.asarray(point_forecast)[0]
     resp = ForecastResponse(status="ok", horizon=horizon, point=_round(point))
