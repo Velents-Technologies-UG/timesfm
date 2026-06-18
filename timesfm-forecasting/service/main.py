@@ -15,7 +15,7 @@ Design rules from the BRD:
 
 Run locally:
     pip install -r requirements.txt
-    uvicorn main:app --host 0.0.0.0 --port 8200
+    uvicorn main:app --host 0.0.0.0 --port 8124
 """
 
 from __future__ import annotations
